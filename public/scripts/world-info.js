@@ -22,6 +22,7 @@ import { StructuredCloneMap } from './util/StructuredCloneMap.js';
 import { renderTemplateAsync } from './templates.js';
 import { t } from './i18n.js';
 import { accountStorage } from './util/AccountStorage.js';
+import { API_PRESET_METADATA_KEY, api_preset_names } from './textgen-settings.js';
 
 export const world_info_insertion_strategy = {
     evenly: 0,
@@ -880,6 +881,8 @@ export function setWorldInfoSettings(settings, data) {
     eventSource.on(event_types.CHAT_CHANGED, async () => {
         const hasWorldInfo = !!chat_metadata[METADATA_KEY] && world_names.includes(chat_metadata[METADATA_KEY]);
         $('.chat_lorebook_button').toggleClass('world_set', hasWorldInfo);
+        const hasApiPreset = !!chat_metadata[API_PRESET_METADATA_KEY] && api_preset_names.includes(chat_metadata[API_PRESET_METADATA_KEY]);
+        $('.chat_api_preset_button').toggleClass('world_set', hasApiPreset);
         // Pre-cache the world info data for the chat for quicker first prompt generation
         await getSortedEntries();
     });
@@ -5025,6 +5028,45 @@ export async function assignLorebookToChat(event) {
     return callGenericPopup(template, POPUP_TYPE.TEXT);
 }
 
+/** TODO: Move to new file
+ * Assigns an api preset to the current chat.
+ * @param {PointerEvent} _event Pointer event
+ * @returns {Promise<void>}
+ */
+export async function assignApiPresetToChat(_event) {
+    const selectedName = chat_metadata[API_PRESET_METADATA_KEY];
+
+    const template = $(await renderTemplateAsync('chatApiPreset'));
+
+    const apiPresetSelect = template.find('select');
+    const chatName = template.find('.chat_name');
+    chatName.text(getCurrentChatId());
+
+    for (const api_preset of api_preset_names) {
+        const option = document.createElement('option');
+        option.value = api_preset;
+        option.innerText = api_preset;
+        option.selected = selectedName === api_preset;
+        apiPresetSelect.append(option);
+    }
+
+    apiPresetSelect.on('change', function () {
+        const apiPresetName = $(this).val();
+
+        if (apiPresetName) {
+            chat_metadata[API_PRESET_METADATA_KEY] = apiPresetName;
+            $('.chat_api_preset_button').addClass('world_set');
+        } else {
+            delete chat_metadata[API_PRESET_METADATA_KEY];
+            $('.chat_api_preset_button').removeClass('world_set');
+        }
+
+        saveMetadata();
+    });
+
+    return callGenericPopup(template, POPUP_TYPE.TEXT);
+}
+
 jQuery(() => {
 
     $('#world_info').on('mousedown change', async function (e) {
@@ -5204,6 +5246,8 @@ jQuery(() => {
     });
 
     $(document).on('click', '.chat_lorebook_button', assignLorebookToChat);
+
+    $(document).on('click', '.chat_api_preset_button', assignApiPresetToChat);
 
     // Not needed on mobile
     if (!isMobile()) {

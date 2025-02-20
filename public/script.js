@@ -38,6 +38,12 @@ import {
     parseTabbyLogprobs,
     loadApiPresets,
     updateApiPreset,
+    API_PRESET_METADATA_KEY,
+    api_presets,
+    api_preset_names,
+    getTextGenGenerationDataFromPreset,
+    textgenerationwebui_presets,
+    textgenerationwebui_preset_names,
 } from './scripts/textgen-settings.js';
 
 import {
@@ -3630,6 +3636,11 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     setGenerationProgress(0);
     generation_started = new Date();
 
+
+    const customApiPreset = chat_metadata[API_PRESET_METADATA_KEY];
+    const currentApiPreset = customApiPreset ? api_presets[api_preset_names.indexOf(customApiPreset)] : undefined;
+    const currentMainApi = currentApiPreset?.main_api || main_api;
+
     // Occurs every time, even if the generation is aborted due to slash commands execution
     await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage }, dryRun);
 
@@ -3639,7 +3650,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     }
 
     // OpenAI doesn't need instruct mode. Use OAI main prompt instead.
-    const isInstruct = power_user.instruct.enabled && main_api !== 'openai';
+    const isInstruct = power_user.instruct.enabled && currentMainApi !== 'openai';
     const isImpersonate = type == 'impersonate';
 
     if (!(dryRun || type == 'regenerate' || type == 'swipe' || type == 'quiet')) {
@@ -3655,7 +3666,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     // Occurs only if the generation is not aborted due to slash commands execution
     await eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage }, dryRun);
 
-    if (main_api == 'kobold' && kai_settings.streaming_kobold && !kai_flags.can_use_streaming) {
+    if (currentMainApi == 'kobold' && kai_settings.streaming_kobold && !kai_flags.can_use_streaming) {
         toastr.error(t`Streaming is enabled, but the version of Kobold used does not support token streaming.`, undefined, { timeOut: 10000, preventDuplicates: true });
         unblockGeneration(type);
         return Promise.resolve();
@@ -3716,7 +3727,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     //this function just gives special care to novel quiet instruction prompts
     if (quiet_prompt) {
         quiet_prompt = substituteParams(quiet_prompt);
-        quiet_prompt = main_api == 'novel' && !quietToLoud ? adjustNovelInstructionPrompt(quiet_prompt) : quiet_prompt;
+        quiet_prompt = currentMainApi == 'novel' && !quietToLoud ? adjustNovelInstructionPrompt(quiet_prompt) : quiet_prompt;
     }
 
     const hasBackendConnection = online_status !== 'no_connection';
@@ -3788,7 +3799,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             await sendMessageAsUser(textareaText, messageBias);
         }
     }
-    else if (textareaText == '' && !automatic_trigger && !dryRun && type === undefined && main_api == 'openai' && oai_settings.send_if_empty.trim().length > 0) {
+    else if (textareaText == '' && !automatic_trigger && !dryRun && type === undefined && currentMainApi == 'openai' && oai_settings.send_if_empty.trim().length > 0) {
         // Use send_if_empty if set and the user message is empty. Only when sending messages normally
         await sendMessageAsUser(oai_settings.send_if_empty.trim(), messageBias);
     }
@@ -3803,7 +3814,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         jailbreak,
     } = getCharacterCardFields();
 
-    if (main_api !== 'openai') {
+    if (currentMainApi !== 'openai') {
         if (power_user.sysprompt.enabled) {
             system = power_user.prefer_character_prompt && system ? system : baseChatReplace(power_user.sysprompt.content, name1, name2);
             system = isInstruct ? formatInstructModeSystemPrompt(substituteParams(system, name1, name2, power_user.sysprompt.content)) : system;
@@ -3900,7 +3911,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
     // Adjust token limit for Horde
     let adjustedParams;
-    if (main_api == 'koboldhorde' && (horde_settings.auto_adjust_context_length || horde_settings.auto_adjust_response_length)) {
+    if (currentMainApi == 'koboldhorde' && (horde_settings.auto_adjust_context_length || horde_settings.auto_adjust_response_length)) {
         try {
             adjustedParams = await adjustHordeGenerationParams(max_context, amount_gen);
         }
@@ -3933,7 +3944,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     console.log(`Core/all messages: ${coreChat.length}/${chat.length}`);
 
     // kingbri MARK: - Make sure the prompt bias isn't the same as the user bias
-    if ((promptBias && !isUserPromptBias) || power_user.always_force_name2 || main_api == 'novel') {
+    if ((promptBias && !isUserPromptBias) || power_user.always_force_name2 || currentMainApi == 'novel') {
         force_name2 = true;
     }
 
@@ -3957,7 +3968,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         }
 
         const exampleSeparator = power_user.context.example_separator ? `${substituteParams(power_user.context.example_separator)}\n` : '';
-        const blockHeading = main_api === 'openai' ? '<START>\n' : (exampleSeparator || (isInstruct ? '<START>\n' : ''));
+        const blockHeading = currentMainApi === 'openai' ? '<START>\n' : (exampleSeparator || (isInstruct ? '<START>\n' : ''));
         const splitExamples = examplesStr.split(/<START>/gi).slice(1).map(block => `${blockHeading}${block.trim()}\n`);
 
         return splitExamples;
@@ -4021,12 +4032,12 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
     // Inject all Depth prompts. Chat Completion does it separately
     let injectedIndices = [];
-    if (main_api !== 'openai') {
+    if (currentMainApi !== 'openai') {
         injectedIndices = await doChatInject(coreChat, isContinue);
     }
 
     // Insert character jailbreak as the last user message (if exists, allowed, preferred, and not using Chat Completion)
-    if (power_user.context.allow_jailbreak && power_user.prefer_character_jailbreak && main_api !== 'openai' && jailbreak) {
+    if (power_user.context.allow_jailbreak && power_user.prefer_character_jailbreak && currentMainApi !== 'openai' && jailbreak) {
         // Set "original" explicity to empty string since there's no original
         jailbreak = substituteParams(jailbreak, name1, name2, '');
 
@@ -4045,7 +4056,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     const lastUserMessageIndex = coreChat.findLastIndex(x => x.is_user);
 
     for (let i = coreChat.length - 1, j = 0; i >= 0; i--, j++) {
-        if (main_api == 'openai') {
+        if (currentMainApi == 'openai') {
             chat2[i] = coreChat[j].mes;
             if (i === 0 && isContinue) {
                 chat2[i] = chat2[i].slice(0, chat2[i].lastIndexOf(coreChat[j].mes) + coreChat[j].mes.length);
@@ -4124,7 +4135,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     let oaiMessages = [];
     let oaiMessageExamples = [];
 
-    if (main_api === 'openai') {
+    if (currentMainApi === 'openai') {
         oaiMessages = setOpenAIMessages(coreChat);
         oaiMessageExamples = setOpenAIMessageExamples(mesExamplesArray);
     }
@@ -4159,7 +4170,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     }
 
     // Only add the chat in context if past the greeting message
-    if (isContinue && (chat2.length > 1 || main_api === 'openai')) {
+    if (isContinue && (chat2.length > 1 || currentMainApi === 'openai')) {
         cyclePrompt = chat2.shift();
     }
 
@@ -4189,7 +4200,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
     for (let i = 0; i < chat2.length; i++) {
         // not needed for OAI prompting
-        if (main_api == 'openai') {
+        if (currentMainApi == 'openai') {
             break;
         }
 
@@ -4238,7 +4249,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     arrMes = newArrMes;
     injectedIndices = newInjectedIndices;
 
-    if (main_api !== 'openai') {
+    if (currentMainApi !== 'openai') {
         setInContextMessages(arrMes.length - injectedIndices.length, type);
     }
 
@@ -4262,7 +4273,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
     if (isContinue) {
         // Coping mechanism for OAI spacing
-        if (main_api === 'openai' && !cyclePrompt.endsWith(' ')) {
+        if (currentMainApi === 'openai' && !cyclePrompt.endsWith(' ')) {
             cyclePrompt += oai_settings.continue_postfix;
             continue_mag += oai_settings.continue_postfix;
         }
@@ -4281,7 +4292,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         arrMes = arrMes.reverse();
         arrMes.forEach(function (item, i, arr) {
             // OAI doesn't need all of this
-            if (main_api === 'openai') {
+            if (currentMainApi === 'openai') {
                 return;
             }
 
@@ -4301,7 +4312,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     let mesExmString = '';
 
     function setPromptString() {
-        if (main_api == 'openai') {
+        if (currentMainApi == 'openai') {
             return;
         }
 
@@ -4429,7 +4440,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         }
     }
 
-    if (generatedPromptCache.length > 0 && main_api !== 'openai') {
+    if (generatedPromptCache.length > 0 && currentMainApi !== 'openai') {
         console.debug('---Generated Prompt Cache length: ' + generatedPromptCache.length);
         await checkPromptSize();
     } else {
@@ -4448,7 +4459,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         }
 
         // OAI has its own prompt manager. No need to do anything here
-        if (main_api === 'openai') {
+        if (currentMainApi === 'openai') {
             return '';
         }
 
@@ -4526,7 +4537,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         });
 
         let data = {
-            api: main_api,
+            api: currentMainApi,
             combinedPrompt: null,
             description,
             personality,
@@ -4565,10 +4576,10 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     let thisPromptBits = [];
 
     let generate_data;
-    switch (main_api) {
+    switch (currentMainApi) {
         case 'koboldhorde':
         case 'kobold':
-            if (main_api == 'koboldhorde' && horde_settings.auto_adjust_response_length) {
+            if (currentMainApi == 'koboldhorde' && horde_settings.auto_adjust_response_length) {
                 maxLength = Math.min(maxLength, adjustedParams.maxLength);
                 maxLength = Math.max(maxLength, MIN_LENGTH); // prevent validation errors
             }
@@ -4582,7 +4593,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             };
 
             if (preset_settings != 'gui') {
-                const isHorde = main_api == 'koboldhorde';
+                const isHorde = currentMainApi == 'koboldhorde';
                 const presetSettings = koboldai_settings[koboldai_setting_names[preset_settings]];
                 const maxContext = (adjustedParams && horde_settings.auto_adjust_context_length) ? adjustedParams.maxContextLength : max_context;
                 generate_data = getKoboldGenerationData(finalPrompt, presetSettings, maxLength, maxContext, isHorde, type);
@@ -4590,7 +4601,18 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             break;
         case 'textgenerationwebui': {
             const cfgValues = useCfgPrompt ? { guidanceScale: cfgGuidanceScale, negativePrompt: await getCombinedPrompt(true) } : null;
-            generate_data = await getTextGenGenerationData(finalPrompt, maxLength, isImpersonate, isContinue, cfgValues, type);
+
+            let ready = false;
+            if (currentApiPreset) {
+                const textGenPreset = textgenerationwebui_presets[textgenerationwebui_preset_names.indexOf(currentApiPreset.textgenerationwebui.preset)];
+                if (textGenPreset) {
+                    generate_data = await getTextGenGenerationDataFromPreset(currentApiPreset.textgenerationwebui, textGenPreset, finalPrompt, isImpersonate, isContinue, cfgValues);
+                    ready = true;
+                }
+            }
+            if (!ready) {
+                generate_data = await getTextGenGenerationData(finalPrompt, maxLength, isImpersonate, isContinue, cfgValues, type);
+            }
             break;
         }
         case 'novel': {
@@ -4682,10 +4704,10 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             scenarioText: scenario,
             this_max_context: this_max_context,
             padding: power_user.token_padding,
-            main_api: main_api,
-            instruction: main_api !== 'openai' && power_user.sysprompt.enabled ? substituteParams(power_user.prefer_character_prompt && system ? system : power_user.sysprompt.content) : '',
+            main_api: currentMainApi,
+            instruction: currentMainApi !== 'openai' && power_user.sysprompt.enabled ? substituteParams(power_user.prefer_character_prompt && system ? system : power_user.sysprompt.content) : '',
             userPersona: (power_user.persona_description_position == persona_description_positions.IN_PROMPT ? (persona || '') : ''),
-            tokenizer: getFriendlyTokenizerName(main_api).tokenizerName || '',
+            tokenizer: getFriendlyTokenizerName(currentMainApi).tokenizerName || '',
             presetName: getPresetManager()?.getSelectedPresetName() || '',
         };
 

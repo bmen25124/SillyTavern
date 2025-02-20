@@ -234,6 +234,7 @@ export let textgenerationwebui_preset_names = [];
  */
 export let api_presets = [];
 export let api_preset_names = [];
+export const API_PRESET_METADATA_KEY = 'api_preset';
 
 export const setting_names = [
     'temp',
@@ -345,7 +346,7 @@ export function getTextGenServer(apiTextGenPreset = undefined) {
         case OPENROUTER:
             return OPENROUTER_SERVER;
         default:
-            return config.server_urls[config.type] ?? '';
+            return settings.server_urls[config.type] ?? '';
     }
 }
 
@@ -1519,7 +1520,25 @@ export async function loadApiPresets(data) {
     api_preset_names = data.api_preset_names;
 
     // TODO: UI
-    $('#settings_preset_api').append(api_preset_names.map(name => `<option value="${name}">${name}</option>`).join(''));
+    const apiPresetSelect = $('#settings_preset_api');
+    apiPresetSelect.append(api_preset_names.map(name => `<option value="${name}">${name}</option>`).join(''));
+    apiPresetSelect.on('change', function () {
+        const presetName = $(this).val();
+        const preset = api_presets[api_preset_names.indexOf(presetName)];
+        if (preset) {
+            const mainApiSelect = $('#main_api');
+            if (mainApiSelect.val() !== preset.main_api) {
+                mainApiSelect.val(preset.main_api);
+                mainApiSelect.trigger('change');
+            }
+
+            const textGenTypeSelect = $('#textgen_type');
+            if (textGenTypeSelect.val() !== preset.textgenerationwebui.type) {
+                textGenTypeSelect.val(preset.textgenerationwebui.type);
+                textGenTypeSelect.trigger('change');
+            }
+        }
+    })
 }
 
 /**
@@ -1536,12 +1555,15 @@ export async function updateApiPreset(type, newValue) {
     }
 
     let anyChange = false;
-    if (type === 'main_api') {
+    if (type === 'main_api' && currentPreset.main_api !== newValue) {
         currentPreset.main_api = newValue;
         anyChange = true;
     } else if (currentPreset.main_api === 'textgenerationwebui') {
-        currentPreset.textgenerationwebui[type] = newValue;
-        anyChange = true;
+        const currentValue = currentPreset.textgenerationwebui[type];
+        if (currentValue !== newValue) {
+            currentPreset.textgenerationwebui[type] = newValue;
+            anyChange = true;
+        }
     }
 
     if (anyChange) {
@@ -1618,7 +1640,7 @@ export async function getTextGenGenerationDataFromPreset(apiTextGenPreset, textg
             toIntArray(banned_tokens) :
             banned_tokens,
         'banned_strings': banned_strings,
-        'api_type': getPresetParam('type'),
+        'api_type': apiTextGenPreset.type,
         'api_server': getTextGenServer(apiTextGenPreset),
         'sampler_order': getPresetParam('type') === textgen_types.KOBOLDCPP ? getPresetParam('sampler_order') : undefined,
         'xtc_threshold': getPresetParam('xtc_threshold'),
