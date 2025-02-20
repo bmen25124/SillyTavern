@@ -169,20 +169,6 @@ class PresetManager {
             },
             isValid: (data) => PresetManager.isPossiblyTextCompletionData(data),
         },
-        'api': {
-            name: 'API Preset',
-            getData: () => {
-                const manager = getPresetManager('api');
-                const name = manager.getSelectedPresetName();
-                return manager.getPresetSettings(name);
-            },
-            setData: (data) => {
-                const manager = getPresetManager('api');
-                const name = data.name;
-                return manager.savePreset(name, data);
-            },
-            isValid: (data) => PresetManager.isPossiblyApiData(data),
-        }
     };
 
     static isPossiblyInstructData(data) {
