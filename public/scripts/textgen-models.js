@@ -1,7 +1,7 @@
 import { DOMPurify } from '../lib.js';
 import { isMobile } from './RossAscends-mods.js';
 import { amount_gen, callPopup, eventSource, event_types, getRequestHeaders, max_context, online_status, setGenerationParamsFromPreset } from '../script.js';
-import { textgenerationwebui_settings as textgen_settings, textgen_types } from './textgen-settings.js';
+import { textgenerationwebui_settings as textgen_settings, textgen_types, updateApiPreset } from './textgen-settings.js';
 import { tokenizers } from './tokenizers.js';
 import { renderTemplateAsync } from './templates.js';
 import { POPUP_TYPE, callGenericPopup } from './popup.js';
@@ -545,12 +545,14 @@ async function fetchFeatherlessNew() {
     return data.items;
 }
 
-function onFeatherlessModelSelect(modelId) {
+async function onFeatherlessModelSelect(modelId) {
     const model = featherlessModels.find(x => x.id === modelId);
     textgen_settings.featherless_model = modelId;
     $('#featherless_model').val(modelId);
     $('#api_button_textgenerationwebui').trigger('click');
     setGenerationParamsFromPreset({ max_length: model.context_length });
+
+    await updateApiPreset('featherless_model', modelId);
 }
 
 let featherlessIsGridView = false;  // Default state set to grid view
@@ -576,68 +578,86 @@ document.addEventListener('DOMContentLoaded', function () {
         featherlessIsGridView = !featherlessIsGridView;
     });
 });
-function onMancerModelSelect() {
+async function onMancerModelSelect() {
     const modelId = String($('#mancer_model').val());
     textgen_settings.mancer_model = modelId;
     $('#api_button_textgenerationwebui').trigger('click');
 
     const limits = mancerModels.find(x => x.id === modelId)?.limits;
     setGenerationParamsFromPreset({ max_length: limits.context });
+
+    await updateApiPreset('mancer_model', modelId);
 }
 
-function onTogetherModelSelect() {
+async function onTogetherModelSelect() {
     const modelName = String($('#model_togetherai_select').val());
     textgen_settings.togetherai_model = modelName;
     $('#api_button_textgenerationwebui').trigger('click');
     const model = togetherModels.find(x => x.name === modelName);
     setGenerationParamsFromPreset({ max_length: model.context_length });
+
+    await updateApiPreset('togetherai_model', modelName);
 }
 
-function onInfermaticAIModelSelect() {
+async function onInfermaticAIModelSelect() {
     const modelName = String($('#model_infermaticai_select').val());
     textgen_settings.infermaticai_model = modelName;
     $('#api_button_textgenerationwebui').trigger('click');
     const model = infermaticAIModels.find(x => x.id === modelName);
     setGenerationParamsFromPreset({ max_length: model.context_length });
+
+    await updateApiPreset('infermaticai_model', modelName);
 }
 
-function onDreamGenModelSelect() {
+async function onDreamGenModelSelect() {
     const modelName = String($('#model_dreamgen_select').val());
     textgen_settings.dreamgen_model = modelName;
     $('#api_button_textgenerationwebui').trigger('click');
     // TODO(DreamGen): Consider retuning max_tokens from API and setting it here.
+
+    await updateApiPreset('dreamgen_model', modelName);
 }
 
-function onOllamaModelSelect() {
+async function onOllamaModelSelect() {
     const modelId = String($('#ollama_model').val());
     textgen_settings.ollama_model = modelId;
     $('#api_button_textgenerationwebui').trigger('click');
+
+    await updateApiPreset('ollama_model', modelId);
 }
 
-function onTabbyModelSelect() {
+async function onTabbyModelSelect() {
     const modelId = String($('#tabby_model').val());
     textgen_settings.tabby_model = modelId;
     $('#api_button_textgenerationwebui').trigger('click');
+
+    await updateApiPreset('tabby_model', modelId);
 }
 
-function onOpenRouterModelSelect() {
+async function onOpenRouterModelSelect() {
     const modelId = String($('#openrouter_model').val());
     textgen_settings.openrouter_model = modelId;
     $('#api_button_textgenerationwebui').trigger('click');
     const model = openRouterModels.find(x => x.id === modelId);
     setGenerationParamsFromPreset({ max_length: model.context_length });
+
+    await updateApiPreset('openrouter_model', modelId);
 }
 
-function onVllmModelSelect() {
+async function onVllmModelSelect() {
     const modelId = String($('#vllm_model').val());
     textgen_settings.vllm_model = modelId;
     $('#api_button_textgenerationwebui').trigger('click');
+
+    await updateApiPreset('vllm_model', modelId);
 }
 
-function onAphroditeModelSelect() {
+async function onAphroditeModelSelect() {
     const modelId = String($('#aphrodite_model').val());
     textgen_settings.aphrodite_model = modelId;
     $('#api_button_textgenerationwebui').trigger('click');
+
+    await updateApiPreset('aphrodite_model', modelId);
 }
 
 function getMancerModelTemplate(option) {

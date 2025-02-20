@@ -786,5 +786,9 @@
     {
         "filename": "presets/context/DeepSeek-V2.5.json",
         "type": "context"
+    },
+    {
+        "filename": "presets/api/main.json",
+        "type": "api"
     }
 ]

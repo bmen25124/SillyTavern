@@ -1,0 +1,16 @@
+{
+    "main_api": "textgenerationwebui",
+    "textgenerationwebui": {
+        "type": "openrouter",
+        "preset": "Default",
+        "openrouter_allow_fallbacks": true,
+        "openrouter_model": "deepseek/deepseek-r1",
+        "openrouter_providers": [
+            "DeepInfra",
+            "DeepSeek",
+            "Nebius"
+        ]
+    },
+    "openai": {
+    }
+}

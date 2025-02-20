@@ -53,6 +53,7 @@ import {
     shouldRedirectToLogin,
     tryAutoLogin,
     router as userDataRouter,
+    migrateApiPresets,
 } from './src/users.js';
 
 import getWebpackServeMiddleware from './src/middleware/webpack-serve.js';
@@ -1134,6 +1135,7 @@ initUserStorage(dataRoot)
     .then(ensurePublicDirectoriesExist)
     .then(migrateUserData)
     .then(migrateSystemPrompts)
+    .then(migrateApiPresets)
     .then(verifySecuritySettings)
     .then(preSetupTasks)
     .then(apply404Middleware)

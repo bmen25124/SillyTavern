@@ -34,6 +34,8 @@ import {
     textgenerationwebui_preset_names,
     textgenerationwebui_presets,
     textgenerationwebui_settings as textgen_settings,
+    api_presets,
+    api_preset_names,
 } from './textgen-settings.js';
 import { download, parseJsonFile, waitUntilCondition } from './utils.js';
 import { t } from './i18n.js';
@@ -167,6 +169,20 @@ class PresetManager {
             },
             isValid: (data) => PresetManager.isPossiblyTextCompletionData(data),
         },
+        'api': {
+            name: 'API Preset',
+            getData: () => {
+                const manager = getPresetManager('api');
+                const name = manager.getSelectedPresetName();
+                return manager.getPresetSettings(name);
+            },
+            setData: (data) => {
+                const manager = getPresetManager('api');
+                const name = data.name;
+                return manager.savePreset(name, data);
+            },
+            isValid: (data) => PresetManager.isPossiblyApiData(data),
+        }
     };
 
     static isPossiblyInstructData(data) {
@@ -187,6 +203,11 @@ class PresetManager {
     static isPossiblyTextCompletionData(data) {
         const textCompletionProps = ['temp', 'top_k', 'top_p', 'rep_pen'];
         return data && textCompletionProps.every(prop => Object.keys(data).includes(prop));
+    }
+
+    static isPossiblyApiData(data) {
+        const apiProps = ['main_api', 'textgenerationwebui', 'openai'];
+        return data && apiProps.every(prop => Object.keys(data).includes(prop));
     }
 
     /**
@@ -468,6 +489,10 @@ class PresetManager {
                 presets = system_prompts;
                 preset_names = system_prompts.map(x => x.name);
                 break;
+            case 'api':
+                presets = api_presets;
+                preset_names = api_preset_names;
+                break;
             default:
                 console.warn(`Unknown API ID ${this.apiId}`);
         }
@@ -476,7 +501,7 @@ class PresetManager {
     }
 
     isKeyedApi() {
-        return this.apiId == 'textgenerationwebui' || this.isAdvancedFormatting();
+        return this.apiId == 'textgenerationwebui' || this.isAdvancedFormatting() || this.apiId === 'api';
     }
 
     isAdvancedFormatting() {
@@ -542,6 +567,10 @@ class PresetManager {
                     const sysprompt_preset = structuredClone(power_user.sysprompt);
                     sysprompt_preset['name'] = name || power_user.sysprompt.preset;
                     return sysprompt_preset;
+                }
+                case 'api': {
+                    // TODO: active preset from settings?
+                    return {};
                 }
                 default:
                     console.warn(`Unknown API ID ${apiId}`);

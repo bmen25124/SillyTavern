@@ -91,6 +91,7 @@ const STORAGE_KEYS = {
  * @property {string} vectors - The directory where the vectors are stored
  * @property {string} backups - The directory where the backups are stored
  * @property {string} sysprompt - The directory where the system prompt data is stored
+ * @property {string} api - The directory where the API presets are stored
  */
 
 /**
@@ -384,6 +385,72 @@ export async function migrateSystemPrompts() {
             writeFileAtomicSync(migrateMarker, '');
         } catch (error) {
             console.error('Error migrating system prompts:', error);
+        }
+    }
+}
+
+// TODO: Make sure it's not messing overriding user's data
+export async function migrateApiPresets() {
+    /**
+     * @returns {Promise<any[]>}
+     */
+    async function getDefaultApiPresets() {
+        try {
+            return getContentOfType('api', 'json');
+        } catch {
+            return [];
+        }
+    }
+
+    const directories = await getUserDirectoriesList();
+    for (const directory of directories) {
+        try {
+            const migrateMarker = path.join(directory.api, '.migrated');
+            if (fs.existsSync(migrateMarker)) {
+                continue;
+            }
+            const backupsPath = path.join(directory.backups, '_api');
+            fs.mkdirSync(backupsPath, { recursive: true });
+            const defaultPresets = await getDefaultApiPresets();
+            const apiFiles = fs.readdirSync(directory.api);
+            let migratedPresets = [];
+            for (const apiFile of apiFiles) {
+                const apiPath = path.join(directory.api, apiFile);
+                const backupPath = path.join(backupsPath, apiFile);
+                if (path.extname(apiFile) === '.json' && !fs.existsSync(backupPath)) {
+                    const apiData = JSON.parse(fs.readFileSync(apiPath, 'utf8'));
+
+                    // Should we use filename or name field?
+                    const filename = path.basename(apiFile, '.json');
+
+                    const backupPath = path.join(backupsPath, `${filename}.json`);
+                    fs.cpSync(apiPath, backupPath, { force: true });
+                    const presetData = { name: filename, content: apiData };
+                    migratedPresets.push(presetData);
+                    writeFileAtomicSync(apiPath, JSON.stringify(apiData, null, 4));
+                }
+            }
+            // Handle default presets
+            for (const defaultPreset of defaultPresets) {
+                if (migratedPresets.find(x => x.name === defaultPreset.name)) {
+                    continue;
+                }
+                const deepCopy = JSON.parse(JSON.stringify(defaultPreset))
+                delete deepCopy._filename
+                writeFileAtomicSync(path.join(directory.api, `${defaultPreset._filename}.json`), JSON.stringify(deepCopy, null, 4));
+            }
+
+            // Only leave unique contents
+            migratedPresets = _.uniqBy(migratedPresets, 'content');
+            for (const presetData of migratedPresets) {
+                presetData.name = `[Migrated] ${presetData.name}`;
+                const presetPath = path.join(directory.api, `${presetData.name}.json`);
+                writeFileAtomicSync(presetPath, JSON.stringify(presetData.content, null, 4));
+                console.log(`Migrated API preset ${presetData.name} for ${directory.root.split(path.sep).pop()}`);
+            }
+            writeFileAtomicSync(migrateMarker, '');
+        } catch (error) {
+            console.error('Error migrating API presets:', error);
         }
     }
 }

@@ -49,6 +49,7 @@ export const CONTENT_TYPES = {
     MOVING_UI: 'moving_ui',
     QUICK_REPLIES: 'quick_replies',
     SYSPROMPT: 'sysprompt',
+    API: 'api',
 };
 
 /**
@@ -242,7 +243,7 @@ export function getContentOfType(type, format) {
             const fileContent = fs.readFileSync(filePath);
             switch (format) {
                 case 'json':
-                    files.push(JSON.parse(fileContent.toString()));
+                    files.push({...JSON.parse(fileContent.toString()), _filename: path.parse(item.filename).name});
                     break;
                 case 'string':
                     files.push(fileContent.toString());
@@ -300,6 +301,8 @@ function getTargetByType(type, directories) {
             return directories.quickreplies;
         case CONTENT_TYPES.SYSPROMPT:
             return directories.sysprompt;
+        case CONTENT_TYPES.API:
+            return directories.api;
         default:
             return null;
     }

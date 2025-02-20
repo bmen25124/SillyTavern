@@ -36,6 +36,8 @@ import {
     validateTextGenUrl,
     parseTextgenLogprobs,
     parseTabbyLogprobs,
+    loadApiPresets,
+    updateApiPreset,
 } from './scripts/textgen-settings.js';
 
 import {
@@ -6663,7 +6665,7 @@ export async function openCharacterChat(file_name) {
 
 ////////// OPTIMZED MAIN API CHANGE FUNCTION ////////////
 
-export function changeMainAPI() {
+export async function changeMainAPI() {
     const selectedVal = $('#main_api').val();
     //console.log(selectedVal);
     const apiElements = {
@@ -6780,6 +6782,8 @@ export function changeMainAPI() {
     validateDisabledSamplers();
     setupChatCompletionPromptManager(oai_settings);
     forceCharacterEditorTokenize();
+
+    await updateApiPreset('main_api', main_api);
 }
 
 export function setUserName(value) {
@@ -6922,6 +6926,8 @@ export async function getSettings() {
         // TextGen
         loadTextGenSettings(data, settings);
 
+        // API presets
+        loadApiPresets(data);
 
         // OpenAI
         loadOpenAISettings(data, settings.oai_settings ?? settings);
@@ -6969,7 +6975,7 @@ export async function getSettings() {
             'selected',
             'true',
         );
-        changeMainAPI();
+        await changeMainAPI();
 
 
         //Load User's Name and Avatar
@@ -10619,9 +10625,9 @@ jQuery(async function () {
         saveSettingsDebounced();
     });
 
-    $('#main_api').change(function () {
+    $('#main_api').change(async function () {
         cancelStatusCheck('Canceled because main api changed');
-        changeMainAPI();
+        await changeMainAPI();
         saveSettingsDebounced();
     });
 

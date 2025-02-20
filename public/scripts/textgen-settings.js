@@ -18,6 +18,7 @@ import { getEventSourceStream } from './sse-stream.js';
 import { getCurrentDreamGenModelTokenizer, getCurrentOpenRouterModelTokenizer } from './textgen-models.js';
 import { ENCODE_TOKENIZERS, TEXTGEN_TOKENIZERS, getTextTokens, tokenizers } from './tokenizers.js';
 import { getSortableDelay, onlyUnique, arraysEqual } from './utils.js';
+import { getPresetManager } from './preset-manager.js';
 
 export const textgen_types = {
     OOBA: 'ooba',
@@ -225,6 +226,15 @@ export let textgenerationwebui_banned_in_macros = [];
 export let textgenerationwebui_presets = [];
 export let textgenerationwebui_preset_names = [];
 
+/**
+ * @type {Array<{
+ *   main_api: string,
+ *   textgenerationwebui: object
+ * }>}
+ */
+export let api_presets = [];
+export let api_preset_names = [];
+
 export const setting_names = [
     'temp',
     'temperature_last',
@@ -318,8 +328,10 @@ export function validateTextGenUrl() {
     control.val(formattedUrl);
 }
 
-export function getTextGenServer() {
-    switch (settings.type) {
+export function getTextGenServer(apiTextGenPreset = undefined) {
+    const config = apiTextGenPreset || settings;
+
+    switch (config.type) {
         case FEATHERLESS:
             return FEATHERLESS_SERVER;
         case MANCER:
@@ -333,7 +345,7 @@ export function getTextGenServer() {
         case OPENROUTER:
             return OPENROUTER_SERVER;
         default:
-            return settings.server_urls[settings.type] ?? '';
+            return config.server_urls[config.type] ?? '';
     }
 }
 
@@ -744,6 +756,7 @@ jQuery(function () {
             $('#api_button_textgenerationwebui').trigger('click');
         }
 
+        updateApiPreset('type', settings.type);
         saveSettingsDebounced();
     });
 
@@ -828,18 +841,20 @@ jQuery(function () {
             const isText = $(this).attr('type') == 'text' || $(this).is('textarea');
             const id = $(this).attr('x-setting-id');
 
+            let value;
             if (isCheckbox) {
-                const value = $(this).prop('checked');
-                settings[id] = value;
+                value = $(this).prop('checked');
             }
             else if (isText) {
-                const value = $(this).val();
-                settings[id] = value;
+                value = $(this).val();
             }
             else {
-                const value = Number($(this).val());
+                value = Number($(this).val());
+            }
+            settings[id] = value;
+
+            if (!isCheckbox && !isText) {
                 $(`#${id}_counter_textgenerationwebui`).val(value);
-                settings[id] = value;
                 //special handling for vLLM/Aphrodite using -1 as disabled instead of 0
                 if ($(this).attr('id') === 'top_k_textgenerationwebui' && [INFERMATICAI, APHRODITE, VLLM].includes(settings.type) && value === 0) {
                     settings[id] = -1;
@@ -847,6 +862,7 @@ jQuery(function () {
                 }
             }
             saveSettingsDebounced();
+            updateApiPreset(id, value);
         });
     }
 
@@ -861,6 +877,7 @@ jQuery(function () {
         }
 
         settings.openrouter_providers = selectedProviders;
+        updateApiPreset('openrouter_providers', selectedProviders);
 
         saveSettingsDebounced();
     });
@@ -1159,45 +1176,47 @@ function toIntArray(string) {
     return string.split(',').map(x => parseInt(x)).filter(x => !isNaN(x));
 }
 
-export function getTextGenModel() {
-    switch (settings.type) {
+export function getTextGenModel(apiTextGenPreset = undefined) {
+    const config = apiTextGenPreset || settings;
+
+    switch (config.type) {
         case OOBA:
-            if (settings.custom_model) {
-                return settings.custom_model;
+            if (config.custom_model) {
+                return config.custom_model;
             }
             break;
         case GENERIC:
-            if (settings.generic_model) {
-                return settings.generic_model;
+            if (config.generic_model) {
+                return config.generic_model;
             }
             break;
         case MANCER:
-            return settings.mancer_model;
+            return config.mancer_model;
         case TOGETHERAI:
-            return settings.togetherai_model;
+            return config.togetherai_model;
         case INFERMATICAI:
-            return settings.infermaticai_model;
+            return config.infermaticai_model;
         case DREAMGEN:
-            return settings.dreamgen_model;
+            return config.dreamgen_model;
         case OPENROUTER:
-            return settings.openrouter_model;
+            return config.openrouter_model;
         case VLLM:
-            return settings.vllm_model;
+            return config.vllm_model;
         case APHRODITE:
-            return settings.aphrodite_model;
+            return config.aphrodite_model;
         case OLLAMA:
-            if (!settings.ollama_model) {
+            if (!config.ollama_model) {
                 toastr.error('No Ollama model selected.', 'Text Completion API');
                 throw new Error('No Ollama model selected');
             }
-            return settings.ollama_model;
+            return config.ollama_model;
         case FEATHERLESS:
-            return settings.featherless_model;
+            return config.featherless_model;
         case HUGGINGFACE:
             return 'tgi';
         case TABBY:
-            if (settings.tabby_model) {
-                return settings.tabby_model;
+            if (config.tabby_model) {
+                return config.tabby_model;
             }
             break;
         default:
@@ -1483,6 +1502,295 @@ export async function getTextGenGenerationData(finalPrompt, maxTokens, isImperso
 
     // Grammar conflicts with with json_schema
     if (settings.type === LLAMACPP) {
+        if (params.json_schema && Object.keys(params.json_schema).length > 0) {
+            delete params.grammar_string;
+            delete params.grammar;
+        } else {
+            delete params.json_schema;
+        }
+    }
+
+    return params;
+}
+
+// TODO: Move to new file
+export async function loadApiPresets(data) {
+    api_presets = convertPresets(data.api_presets);
+    api_preset_names = data.api_preset_names;
+
+    // TODO: UI
+    $('#api').append(api_preset_names.map(name => `<option value="${name}">${name}</option>`).join(''));
+}
+
+/**
+ * @param {'main_api' | 'type' | 'preset' | any} type
+ * @param {any} newValue
+ */
+export async function updateApiPreset(type, newValue) {
+    const manager = getPresetManager('api');
+    const selectedName = manager.getSelectedPresetName();
+
+    const currentPreset = api_presets[api_preset_names.indexOf(selectedName)];
+    if (!currentPreset) {
+        return;
+    }
+
+    let anyChange = false;
+    if (type === 'main_api') {
+        currentPreset.main_api = newValue;
+        anyChange = true;
+    } else if (currentPreset.main_api === 'textgenerationwebui') {
+        currentPreset.textgenerationwebui[type] = newValue;
+        anyChange = true;
+    }
+
+    if (anyChange) {
+        manager.savePreset(selectedName, currentPreset);
+    }
+}
+
+// TODO: Migrate with current getTextGenGenerationData
+export async function getTextGenGenerationDataFromPreset(apiTextGenPreset, textgenPreset, finalPrompt, isImpersonate, isContinue, cfgValues) {
+    const canMultiSwipe = !isContinue && !isImpersonate;
+
+    // Use preset parameters instead of global settings
+    const getPresetParam = (name) => textgenPreset[name] ?? settings[name];
+
+    // TODO: Get from preset
+    const { banned_tokens, banned_strings } = getCustomTokenBans();
+
+    const dynatemp = getPresetParam('dynatemp');
+    const maxTokens = getPresetParam('genamt') || settings
+
+    let params = {
+        'prompt': finalPrompt,
+        'model': getTextGenModel(apiTextGenPreset),
+        'max_new_tokens': maxTokens,
+        'max_tokens': maxTokens,
+        'logprobs': power_user.request_token_probabilities ? getLogprobsNumber() : undefined,
+        'temperature': dynatemp ? (getPresetParam('min_temp') + getPresetParam('max_temp')) / 2 : getPresetParam('temp'),
+        'top_p': getPresetParam('top_p'),
+        'typical_p': getPresetParam('typical_p'),
+        'typical': getPresetParam('typical_p'),
+        'sampler_seed': getPresetParam('seed') >= 0 ? getPresetParam('seed') : undefined,
+        'min_p': getPresetParam('min_p'),
+        'repetition_penalty': getPresetParam('rep_pen'),
+        'frequency_penalty': getPresetParam('freq_pen'),
+        'presence_penalty': getPresetParam('presence_pen'),
+        'top_k': getPresetParam('top_k'),
+        'skew': getPresetParam('skew'),
+        'min_length': getPresetParam('type') === OOBA ? getPresetParam('min_length') : undefined,
+        'minimum_message_content_tokens': getPresetParam('type') === DREAMGEN ? getPresetParam('min_length') : undefined,
+        'min_tokens': getPresetParam('min_length'),
+        'num_beams': getPresetParam('type') === OOBA ? getPresetParam('num_beams') : undefined,
+        'length_penalty': getPresetParam('type') === OOBA ? getPresetParam('length_penalty') : undefined,
+        'early_stopping': getPresetParam('type') === OOBA ? getPresetParam('early_stopping') : undefined,
+        'add_bos_token': getPresetParam('add_bos_token'),
+        'dynamic_temperature': dynatemp ? true : undefined,
+        'dynatemp_low': dynatemp ? getPresetParam('min_temp') : undefined,
+        'dynatemp_high': dynatemp ? getPresetParam('max_temp') : undefined,
+        'dynatemp_range': dynatemp ? (getPresetParam('max_temp') - getPresetParam('min_temp')) / 2 : undefined,
+        'dynatemp_exponent': dynatemp ? getPresetParam('dynatemp_exponent') : undefined,
+        'smoothing_factor': getPresetParam('smoothing_factor'),
+        'smoothing_curve': getPresetParam('smoothing_curve'),
+        'dry_allowed_length': getPresetParam('dry_allowed_length'),
+        'dry_multiplier': getPresetParam('dry_multiplier'),
+        'dry_base': getPresetParam('dry_base'),
+        'dry_sequence_breakers': replaceMacrosInList(getPresetParam('dry_sequence_breakers')),
+        'dry_penalty_last_n': getPresetParam('dry_penalty_last_n'),
+        'max_tokens_second': getPresetParam('max_tokens_second'),
+        'sampler_priority': getPresetParam('type') === OOBA ? getPresetParam('sampler_priority') : undefined,
+        'samplers': getPresetParam('type') === LLAMACPP ? getPresetParam('samplers') : undefined,
+        'stopping_strings': getStoppingStrings(isImpersonate, isContinue),
+        'stop': getStoppingStrings(isImpersonate, isContinue),
+        'truncation_length': max_context,
+        'ban_eos_token': getPresetParam('ban_eos_token'),
+        'skip_special_tokens': getPresetParam('skip_special_tokens'),
+        'include_reasoning': getPresetParam('include_reasoning'),
+        'top_a': getPresetParam('top_a'),
+        'tfs': getPresetParam('tfs'),
+        'epsilon_cutoff': [OOBA, MANCER].includes(getPresetParam('type')) ? getPresetParam('epsilon_cutoff') : undefined,
+        'eta_cutoff': [OOBA, MANCER].includes(getPresetParam('type')) ? getPresetParam('eta_cutoff') : undefined,
+        'mirostat_mode': getPresetParam('mirostat_mode'),
+        'mirostat_tau': getPresetParam('mirostat_tau'),
+        'mirostat_eta': getPresetParam('mirostat_eta'),
+        'custom_token_bans': [APHRODITE, MANCER].includes(getPresetParam('type')) ?
+            toIntArray(banned_tokens) :
+            banned_tokens,
+        'banned_strings': banned_strings,
+        'api_type': getPresetParam('type'),
+        'api_server': getTextGenServer(apiTextGenPreset),
+        'sampler_order': getPresetParam('type') === textgen_types.KOBOLDCPP ? getPresetParam('sampler_order') : undefined,
+        'xtc_threshold': getPresetParam('xtc_threshold'),
+        'xtc_probability': getPresetParam('xtc_probability'),
+        'nsigma': getPresetParam('nsigma'),
+    };
+    const nonAphroditeParams = {
+        'rep_pen': getPresetParam('rep_pen'),
+        'rep_pen_range': getPresetParam('rep_pen_range'),
+        'repetition_decay': getPresetParam('type') === TABBY ? getPresetParam('rep_pen_decay') : undefined,
+        'repetition_penalty_range': getPresetParam('rep_pen_range'),
+        'encoder_repetition_penalty': getPresetParam('type') === OOBA ? getPresetParam('encoder_rep_pen') : undefined,
+        'no_repeat_ngram_size': getPresetParam('type') === OOBA ? getPresetParam('no_repeat_ngram_size') : undefined,
+        'penalty_alpha': getPresetParam('type') === OOBA ? getPresetParam('penalty_alpha') : undefined,
+        'temperature_last': (getPresetParam('type') === OOBA || getPresetParam('type') === APHRODITE || getPresetParam('type') == TABBY) ? getPresetParam('temperature_last') : undefined,
+        'speculative_ngram': getPresetParam('type') === TABBY ? getPresetParam('speculative_ngram') : undefined,
+        'do_sample': getPresetParam('type') === OOBA ? getPresetParam('do_sample') : undefined,
+        'seed': getPresetParam('seed') >= 0 ? getPresetParam('seed') : undefined,
+        'guidance_scale': cfgValues?.guidanceScale?.value ?? getPresetParam('guidance_scale') ?? 1,
+        'negative_prompt': cfgValues?.negativePrompt ?? substituteParams(getPresetParam('negative_prompt')) ?? '',
+        'grammar_string': getPresetParam('grammar_string'),
+        'json_schema': [TABBY, LLAMACPP].includes(getPresetParam('type')) ? getPresetParam('json_schema') : undefined,
+        // llama.cpp aliases. In case someone wants to use LM Studio as Text Completion API
+        'repeat_penalty': getPresetParam('rep_pen'),
+        'tfs_z': getPresetParam('tfs'),
+        'repeat_last_n': getPresetParam('rep_pen_range'),
+        'n_predict': maxTokens,
+        'num_predict': maxTokens,
+        'num_ctx': max_context,
+        'mirostat': getPresetParam('mirostat_mode'),
+        'ignore_eos': getPresetParam('ban_eos_token'),
+        'n_probs': power_user.request_token_probabilities ? 10 : undefined,
+        'rep_pen_slope': getPresetParam('rep_pen_slope'),
+    };
+    const vllmParams = {
+        'n': canMultiSwipe ? getPresetParam('n') : 1,
+        'ignore_eos': getPresetParam('ignore_eos_token'),
+        'spaces_between_special_tokens': getPresetParam('spaces_between_special_tokens'),
+        'seed': getPresetParam('seed') >= 0 ? getPresetParam('seed') : undefined,
+    };
+    const aphroditeParams = {
+        'n': canMultiSwipe ? getPresetParam('n') : 1,
+        'frequency_penalty': getPresetParam('freq_pen'),
+        'presence_penalty': getPresetParam('presence_pen'),
+        'repetition_penalty': getPresetParam('rep_pen'),
+        'seed': getPresetParam('seed') >= 0 ? getPresetParam('seed') : undefined,
+        'stop': getStoppingStrings(isImpersonate, isContinue),
+        'temperature': dynatemp ? (getPresetParam('min_temp') + getPresetParam('max_temp')) / 2 : getPresetParam('temp'),
+        'temperature_last': getPresetParam('temperature_last'),
+        'top_p': getPresetParam('top_p'),
+        'top_k': getPresetParam('top_k'),
+        'top_a': getPresetParam('top_a'),
+        'min_p': getPresetParam('min_p'),
+        'tfs': getPresetParam('tfs'),
+        'eta_cutoff': getPresetParam('eta_cutoff'),
+        'epsilon_cutoff': getPresetParam('epsilon_cutoff'),
+        'typical_p': getPresetParam('typical_p'),
+        'smoothing_factor': getPresetParam('smoothing_factor'),
+        'smoothing_curve': getPresetParam('smoothing_curve'),
+        'ignore_eos': getPresetParam('ignore_eos_token'),
+        'min_tokens': getPresetParam('min_length'),
+        'skip_special_tokens': getPresetParam('skip_special_tokens'),
+        'spaces_between_special_tokens': getPresetParam('spaces_between_special_tokens'),
+        'guided_grammar': getPresetParam('grammar_string'),
+        'guided_json': getPresetParam('json_schema'),
+        'early_stopping': false, // hacks
+        'include_stop_str_in_output': false,
+        'dynatemp_min': dynatemp ? getPresetParam('min_temp') : undefined,
+        'dynatemp_max': dynatemp ? getPresetParam('max_temp') : undefined,
+        'dynatemp_exponent': dynatemp ? getPresetParam('dynatemp_exponent') : undefined,
+        'xtc_threshold': getPresetParam('xtc_threshold'),
+        'xtc_probability': getPresetParam('xtc_probability'),
+        'nsigma': getPresetParam('nsigma'),
+        'custom_token_bans': toIntArray(banned_tokens),
+        'no_repeat_ngram_size': getPresetParam('no_repeat_ngram_size'),
+        'sampler_priority': getPresetParam('type') === APHRODITE && !arraysEqual(
+            getPresetParam('samplers_priorities'),
+            APHRODITE_DEFAULT_ORDER)
+            ? getPresetParam('samplers_priorities')
+            : undefined,
+    };
+
+    if (getPresetParam('type') === OPENROUTER) {
+        params.provider = getPresetParam('openrouter_providers');
+        params.allow_fallbacks = getPresetParam('openrouter_allow_fallbacks');
+    }
+
+    if (getPresetParam('type') === KOBOLDCPP) {
+        params.grammar = getPresetParam('grammar_string');
+        params.trim_stop = true;
+    }
+
+    if (getPresetParam('type') === HUGGINGFACE) {
+        params.top_p = Math.min(Math.max(Number(params.top_p), 0.0), 0.999);
+        params.stop = Array.isArray(params.stop) ? params.stop.slice(0, 4) : [];
+        nonAphroditeParams.seed = getPresetParam('seed') >= 0 ? getPresetParam('seed') : Math.floor(Math.random() * Math.pow(2, 32));
+    }
+
+    if (getPresetParam('type') === MANCER) {
+        params.n = canMultiSwipe ? getPresetParam('n') : 1;
+        params.epsilon_cutoff /= 1000;
+        params.eta_cutoff /= 1000;
+        params.dynatemp_mode = params.dynamic_temperature ? 1 : 0;
+        params.dynatemp_min = params.dynatemp_low;
+        params.dynatemp_max = params.dynatemp_high;
+        delete params.dynatemp_low;
+        delete params.dynatemp_high;
+    }
+
+    if (getPresetParam('type') === TABBY) {
+        params.n = canMultiSwipe ? getPresetParam('n') : 1;
+    }
+
+    switch (getPresetParam('type')) {
+        case VLLM:
+        case INFERMATICAI:
+            params = Object.assign(params, vllmParams);
+            break;
+
+        case APHRODITE:
+            // set params to aphroditeParams
+            params = Object.assign(params, aphroditeParams);
+            break;
+
+        default:
+            params = Object.assign(params, nonAphroditeParams);
+            break;
+    }
+
+    if (Array.isArray(getPresetParam('logit_bias')) && getPresetParam('logit_bias').length) {
+        // TODO: Get from preset
+        const logitBias = BIAS_CACHE.get(BIAS_KEY) || calculateLogitBias();
+        BIAS_CACHE.set(BIAS_KEY, logitBias);
+        params.logit_bias = logitBias;
+    }
+
+    if (getPresetParam('type') === LLAMACPP || getPresetParam('type') === OLLAMA) {
+        // Convert bias and token bans to array of arrays
+        const logitBiasArray = (params.logit_bias && typeof params.logit_bias === 'object' && Object.keys(params.logit_bias).length > 0)
+            ? Object.entries(params.logit_bias).map(([key, value]) => [Number(key), value])
+            : [];
+        const tokenBans = toIntArray(banned_tokens);
+        logitBiasArray.push(...tokenBans.map(x => [Number(x), false]));
+        const sequenceBreakers = (() => {
+            try {
+                return JSON.parse(params.dry_sequence_breakers);
+            } catch {
+                if (typeof params.dry_sequence_breakers === 'string') {
+                    return params.dry_sequence_breakers.split(',');
+                }
+
+                return undefined;
+            }
+        })();
+        const llamaCppParams = {
+            'logit_bias': logitBiasArray,
+            // Conflicts with ooba's grammar_string
+            'grammar': getPresetParam('grammar_string'),
+            'cache_prompt': true,
+            'dry_sequence_breakers': sequenceBreakers,
+        };
+        params = Object.assign(params, llamaCppParams);
+        if (!Array.isArray(sequenceBreakers) || sequenceBreakers.length === 0) {
+            delete params.dry_sequence_breakers;
+        }
+    }
+
+    // Use param for emitting
+    // await eventSource.emit(event_types.TEXT_COMPLETION_SETTINGS_READY, params);
+
+    // Grammar conflicts with json_schema
+    if (getPresetParam('type') === LLAMACPP) {
         if (params.json_schema && Object.keys(params.json_schema).length > 0) {
             delete params.grammar_string;
             delete params.grammar;
