@@ -426,6 +426,10 @@ class PresetManager {
             settings = convertNovelPreset(settings);
         }
 
+        if (this.apiId === 'api' && !settings) {
+            settings = api_presets[api_preset_names.indexOf(this.getSelectedPresetName())];
+        }
+
         const preset = settings ?? this.getPresetSettings(name);
 
         const response = await fetch('/api/presets/save', {
@@ -569,7 +573,6 @@ class PresetManager {
                     return sysprompt_preset;
                 }
                 case 'api': {
-                    // TODO: active preset from settings?
                     return {};
                 }
                 default:

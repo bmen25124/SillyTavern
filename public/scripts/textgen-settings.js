@@ -1519,7 +1519,7 @@ export async function loadApiPresets(data) {
     api_preset_names = data.api_preset_names;
 
     // TODO: UI
-    $('#api').append(api_preset_names.map(name => `<option value="${name}">${name}</option>`).join(''));
+    $('#settings_preset_api').append(api_preset_names.map(name => `<option value="${name}">${name}</option>`).join(''));
 }
 
 /**

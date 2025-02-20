@@ -2113,7 +2113,28 @@
                 <h3 class="margin0" id="title_api">API</h3>
                 <div class="flex-container flexFlowColumn">
                     <div id="main-API-selector-block">
-                        <select id="api" data-preset-manager-for="api">
+                        <div class="flex-container flexNoGap">
+                            <select id="settings_preset_api" class="flex1 text_pole" data-preset-manager-for="api">
+                            </select>
+                            <div class="flex-container marginLeft5 gap3px">
+                                <input type="file" hidden data-preset-manager-file="api" accept=".json, .settings">
+                                <div data-preset-manager-update="api" class="menu_button menu_button_icon" title="Update current preset" data-i18n="[title]Update current preset">
+                                    <i class="fa-fw fa-solid fa-save"></i>
+                                </div>
+                                <div data-preset-manager-rename="api" class="menu_button menu_button_icon" title="Rename current preset" data-i18n="[title]Rename current preset">
+                                    <i class="fa-fw fa-solid fa-pencil"></i>
+                                </div>
+                                <div data-preset-manager-new="api" class="menu_button menu_button_icon" title="Save preset as" data-i18n="[title]Save preset as">
+                                    <i class="fa-fw fa-solid fa-file-circle-plus"></i>
+                                </div>
+                                <div data-preset-manager-restore="api" class="menu_button menu_button_icon" title="Restore current preset" data-i18n="[title]Restore current preset">
+                                    <i class="fa-fw fa-solid fa-recycle"></i>
+                                </div>
+                                <div data-preset-manager-delete="api" class="margin0 menu_button_icon menu_button" title="Delete the preset" data-i18n="[title]Delete the preset">
+                                    <i class="fa-fw fa-solid fa-trash-can"></i>
+                                </div>
+                            </div>
+                        </div>
                         </select>
                         <select id="main_api">
                             <option value="textgenerationwebui" data-i18n="Text Completion">Text Completion</option>
