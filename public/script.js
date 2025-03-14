@@ -6002,6 +6002,8 @@ export function cleanUpMessage(getMessage, isImpersonate, isContinue, displayInc
 
 /**
  * Adds an image to the message.
+ * @param {object} message
+ * @param {{ parsedImage?: ParsedImage, imageUrl?: string }} options
  * @returns {Promise<void>}
  */
 async function processImageAttachment(message, { parsedImage, imageUrl }) {
@@ -6159,7 +6161,7 @@ export async function saveReply(type, getMessage, fromStreaming, title, swipes, 
             chat[chat.length - 1]['extra']['gen_id'] = group_generation_id;
         }
 
-        await processImageAttachment(chat[chat.length - 1], { parsedImage, imageUrl: imageUrl });
+        await processImageAttachment(chat[chat.length - 1], { parsedImage, imageUrl });
         const chat_id = (chat.length - 1);
 
         !fromStreaming && await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
@@ -6267,7 +6269,7 @@ export function syncMesToSwipe(messageId = null) {
 
 /**
  * Saves the image to the message object.
- * @param {{ image?: string, title?: string, inline?: boolean }} img Image object
+ * @param {ParsedImage} img Image object
  * @param {object} mes Chat message object
  */
 function saveImageToMessage(img, mes) {
@@ -6314,6 +6316,14 @@ function getGeneratingModel(mes) {
     return model;
 }
 
+/**
+ * @typedef {object} ParsedImage
+ * @property {string?} [image] - The URL of the image.
+ * @property {string?} [title] - The title of the image.
+ * @property {boolean} inline - Whether the image should be displayed inline.
+ * @property {string?} [getMessage] - The message without the image.
+ * @returns {ParsedImage}
+ */
 function extractImageFromMessage(getMessage) {
     const regex = /<img src="(.*?)".*?alt="(.*?)".*?>/g;
     const results = regex.exec(getMessage);
