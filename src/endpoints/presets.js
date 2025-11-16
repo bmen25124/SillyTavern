@@ -32,6 +32,8 @@ function getPresetSettingsByAPI(apiId, directories) {
             return { folder: directories.sysprompt, extension: '.json' };
         case 'reasoning':
             return { folder: directories.reasoning, extension: '.json' };
+        case 'v2ExperimentalSamplerPreset':
+            return { folder: directories.v2ExperimentalSamplerPreset, extension: '.json' };
         default:
             return { folder: null, extension: null };
     }

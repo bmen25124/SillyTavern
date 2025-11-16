@@ -246,6 +246,12 @@ router.post('/get', (request, response) => {
             sortFunction: sortByName(request.user.directories.koboldAI_Settings), removeFileExtension: true,
         });
 
+    // V2 Experimental Sampler Presets
+    const { fileContents: v2ExperimentalSamplerPreset_settings, fileNames: v2ExperimentalSamplerPreset_names }
+        = readPresetsFromDirectory(request.user.directories.v2ExperimentalSamplerPreset, {
+            sortFunction: sortByName(request.user.directories.v2ExperimentalSamplerPreset), removeFileExtension: true,
+        });
+
     const worldFiles = fs
         .readdirSync(request.user.directories.worlds)
         .filter(file => path.extname(file).toLowerCase() === '.json')
@@ -272,6 +278,8 @@ router.post('/get', (request, response) => {
         openai_setting_names,
         textgenerationwebui_presets,
         textgenerationwebui_preset_names,
+        v2ExperimentalSamplerPreset_settings,
+        v2ExperimentalSamplerPreset_names,
         themes,
         movingUIPresets,
         quickReplyPresets,

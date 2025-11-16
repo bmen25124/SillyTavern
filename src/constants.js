@@ -45,6 +45,7 @@ export const USER_DIRECTORY_TEMPLATE = Object.freeze({
     backups: 'backups',
     sysprompt: 'sysprompt',
     reasoning: 'reasoning',
+    v2ExperimentalSamplerPreset: 'v2ExperimentalSamplerPreset',
 });
 
 /**
@@ -512,6 +513,7 @@ export const MEDIA_EXTENSIONS = [
     'm4a',
     'aiff',
 ];
+
 
 /**
  * Bitwise flag-style media request types.

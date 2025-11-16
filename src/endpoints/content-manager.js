@@ -53,6 +53,7 @@ export const CONTENT_TYPES = {
     QUICK_REPLIES: 'quick_replies',
     SYSPROMPT: 'sysprompt',
     REASONING: 'reasoning',
+    V2_EXPERIMENTAL_SAMPLER_PRESET: 'v2ExperimentalSamplerPreset',
 };
 
 /**
@@ -66,7 +67,7 @@ export function getDefaultPresets(directories) {
         const presets = [];
 
         for (const contentItem of contentIndex) {
-            if (contentItem.type.endsWith('_preset') || ['instruct', 'context', 'sysprompt', 'reasoning'].includes(contentItem.type)) {
+            if (contentItem.type.endsWith('_preset') || ['instruct', 'context', 'sysprompt', 'reasoning', 'v2ExperimentalSamplerPreset'].includes(contentItem.type)) {
                 contentItem.name = path.parse(contentItem.filename).name;
                 contentItem.folder = getTargetByType(contentItem.type, directories);
                 presets.push(contentItem);
@@ -307,6 +308,8 @@ function getTargetByType(type, directories) {
             return directories.sysprompt;
         case CONTENT_TYPES.REASONING:
             return directories.reasoning;
+        case CONTENT_TYPES.V2_EXPERIMENTAL_SAMPLER_PRESET:
+            return directories.v2ExperimentalSamplerPreset;
         default:
             return null;
     }
